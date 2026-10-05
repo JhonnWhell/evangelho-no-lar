@@ -1,0 +1,32 @@
+# =====================================================================
+# Proteção de direitos autorais (D-03, D-14): texto dos livros NUNCA
+# entra neste repositório público.
+# Bloqueia todo .txt; libera só a licença da fonte e os modelos vazios.
+# Atenção: upload pelo site do GitHub ignora este arquivo.
+# =====================================================================
+*.txt
+!fonts/OFL.txt
+!modelos/modelo-ese-capitulo.txt
+!modelos/modelo-le-capitulo.txt
+
+# Texto e glossário por capítulo vivem no Drive, nunca aqui
+textos/
+glossario/
+
+# Dados dos encontros (D-05): vivem só no Drive
+*.jsonl
+registro.md
+estado.json
+participantes.json
+
+# Configuração local do lançador (uma por máquina)
+lancador/config.json
+
+# Segredos
+.env
+*.senha
+
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store
