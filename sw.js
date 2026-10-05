@@ -11,13 +11,14 @@
    Ao publicar qualquer mudança, aumente VERSAO.
    ===================================================================== */
 var PREFIXO = 'enl-';
-var VERSAO = PREFIXO + 'v0.1.0';
+var VERSAO = PREFIXO + 'v0.2.0';
 
 var ARQUIVOS = [
   './',
   'index.html',
   'style.css',
   'parser.js',
+  'dados-exemplo.js',
   'app.js',
   'manifest.webmanifest',
   'icons/icone-192.png',

@@ -14,13 +14,22 @@ Textos e dados ficam no Google Drive privado (D-03, D-05, D-14).
 | Arquivo | Função |
 |---|---|
 | `index.html` | estrutura das telas |
-| `app.js` | lógica do app |
+| `app.js` | lógica do app (telas da v1) |
+| `dados-exemplo.js` | valores iniciais da primeira abertura: roteiro, Prece de Cáritas, modelo da mensagem, onde a leitura parou. Sem link da sala, sem nomes, sem texto dos livros. |
 | `parser.js` | leitor do formato de texto 1. **Cópia exata** do repositório `jhonnwhell/fitilho` (parser 1.0.1). Não editar aqui: atualizar copiando de lá. |
 | `style.css` | aparência |
 | `manifest.webmanifest` | instalação como app |
 | `sw.js` | funcionamento sem internet |
 | `fonts/` | Atkinson Hyperlegible (SIL OFL 1.1, ver `fonts/OFL.txt`) |
 | `icons/` | ícones (provisórios até a escolha do nome curto, P-14) |
+
+## Onde ficam os dados (por enquanto)
+
+Até o passo 4 (Apps Script + Drive), tudo fica só no aparelho, no
+armazenamento do navegador, com prefixo `enl.`: roteiro, leituras,
+encontro em andamento, registros, anotações e textos dos livros.
+Cada aparelho tem os seus. O link da sala é cadastrado em
+**Modo edição › Sala e mensagem**.
 
 ## Convivência com o Fitilho
 
