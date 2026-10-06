@@ -250,3 +250,20 @@ textarea.entrada { resize: vertical; line-height: 1.5; }
   .rodape-nav .grade2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rodape-nav .btn { min-height: 56px; padding: 0 10px; }
 }
+
+/* ---------- relatar problema (D-15) ---------- */
+.btn-relatar {
+  min-height: 44px; padding: 0 14px; border: 2px solid var(--borda-forte); border-radius: 999px;
+  background: var(--superficie); color: var(--suave); font-size: 17px; font-weight: 700;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.log-lista {
+  margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px;
+  font-family: ui-monospace, Consolas, 'Courier New', monospace; font-size: 14px; line-height: 1.4;
+  max-height: 40vh; overflow-y: auto; overflow-wrap: anywhere;
+}
+.log-lista .erro { color: var(--erro); font-weight: 700; }
+@media (max-width: 560px) {
+  .btn-relatar { width: 44px; padding: 0; justify-content: center; }
+  .btn-relatar .txt { display: none; }
+}

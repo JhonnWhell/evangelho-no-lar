@@ -11,7 +11,7 @@
    Ao publicar qualquer mudança, aumente VERSAO.
    ===================================================================== */
 var PREFIXO = 'enl-';
-var VERSAO = PREFIXO + 'v0.2.0';
+var VERSAO = PREFIXO + 'v0.3.0';
 
 var ARQUIVOS = [
   './',

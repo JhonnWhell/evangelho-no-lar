@@ -11,7 +11,7 @@
 (function () {
   'use strict';
 
-  var VERSAO_APP = '0.2.0';
+  var VERSAO_APP = '0.3.0';
   var FT = window.FormatoTexto1;
   var SEMENTE = window.ENL_SEMENTE;
   var $app = document.getElementById('app');
@@ -61,8 +61,70 @@
     baixo: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>',
     x: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>',
     check: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>',
+    bandeira: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 22V4"></path><path d="M5 4h12l-2.5 4.5L17 13H5"></path></svg>',
     lapis: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>'
   };
+
+  /* =================================================================
+     Registro de eventos (log) — D-15
+     Fica no aparelho ("enl.log"), últimos LOG_MAX eventos.
+     NUNCA registrar (D-05): texto de anotação, nomes de presentes,
+     texto dos livros, link da sala, conteúdo de registro de encontro.
+     Só nomes de ação, telas, contagens e erros de código.
+     Cada evento é autossuficiente (aparelho e versão dentro), pronto
+     para virar uma linha de logs/<aparelho>.jsonl no Drive depois.
+     ================================================================= */
+  var LOG_MAX = 500;
+  var Log = {
+    _buf: null,
+    _ler: function () { try { return JSON.parse(localStorage.getItem('enl.log') || '[]'); } catch (e) { return []; } },
+    _gravar: function () {
+      try { localStorage.setItem('enl.log', JSON.stringify(this._buf)); }
+      catch (e) {
+        this._buf = this._buf.slice(-100);
+        try { localStorage.setItem('enl.log', JSON.stringify(this._buf)); } catch (e2) { /* sem espaço: segue sem log */ }
+      }
+    },
+    aparelho: function () {
+      var id = null;
+      try { id = localStorage.getItem('enl.aparelho'); } catch (e) { /* nada */ }
+      if (!id) {
+        id = 'ap-' + Math.random().toString(36).slice(2, 8);
+        try { localStorage.setItem('enl.aparelho', id); } catch (e) { /* nada */ }
+      }
+      return id;
+    },
+    eventos: function () { if (!this._buf) this._buf = this._ler(); return this._buf; },
+    add: function (nivel, cat, msg, dados) {
+      var ev = { t: instante(), ap: this.aparelho(), v: VERSAO_APP, n: nivel, c: cat, tela: rotuloTela(), m: String(msg == null ? '' : msg).slice(0, 500) };
+      if (dados) ev.d = dados;
+      this._buf = this._ler(); // relê: a janela da Prece de Cáritas também grava
+      var b = this._buf;
+      b.push(ev);
+      if (b.length > LOG_MAX) b.splice(0, b.length - LOG_MAX);
+      this._gravar();
+      return ev;
+    },
+    limpar: function () { this._buf = []; this._gravar(); }
+  };
+
+  function semOrigem(u) { return String(u || '').replace(location.origin, ''); }
+  window.addEventListener('error', function (ev) {
+    var alvo = ev.target;
+    if (alvo && alvo !== window && (alvo.src || alvo.href)) {
+      Log.add('ERRO', 'recurso', 'Falhou ao carregar', { url: semOrigem(alvo.src || alvo.href) });
+      return;
+    }
+    Log.add('ERRO', 'js', ev.message, {
+      arquivo: semOrigem(ev.filename), linha: ev.lineno, coluna: ev.colno,
+      pilha: ev.error && ev.error.stack ? semOrigem(ev.error.stack).slice(0, 1200) : ''
+    });
+    try { avisar('Erro no app. Toque em Relatar, no topo, para enviar o relatório.'); } catch (e) { /* nada */ }
+  }, true);
+  window.addEventListener('unhandledrejection', function (ev) {
+    var r = ev.reason;
+    Log.add('ERRO', 'promessa', r && r.message ? r.message : String(r), { pilha: r && r.stack ? semOrigem(r.stack).slice(0, 1200) : '' });
+  });
 
   /* =================================================================
      Armazenamento no aparelho (prefixo "enl.")
@@ -74,7 +136,11 @@
     },
     gravar: function (k, v) {
       try { localStorage.setItem('enl.' + k, JSON.stringify(v)); return true; }
-      catch (e) { avisar('Não deu para guardar no aparelho (' + (e && e.name) + '). Nada foi perdido do que já estava guardado.'); return false; }
+      catch (e) {
+        Log.add('ERRO', 'armazenamento', 'Falha ao gravar', { chave: k, erro: e && e.name });
+        avisar('Não deu para guardar no aparelho (' + (e && e.name) + '). Nada foi perdido do que já estava guardado.');
+        return false;
+      }
     },
     apagar: function (k) { try { localStorage.removeItem('enl.' + k); } catch (e) { /* nada */ } }
   };
@@ -269,6 +335,26 @@
   function telaLeitura() { var t = tipoEtapa(etapaAtual()); return ui.tela === 'etapa' && (t === 'le' || t === 'ese'); }
   function tamanho() { return Local.ler('tamanho', Dados.conteudo.preferencias.tamanho || 28); }
 
+  var NOMES_TELA = {
+    inicio: 'Início', mensagem: 'Mensagem do WhatsApp', fim: 'Encontro registrado', edicao: 'Modo edição',
+    textos: 'Textos dos livros', analise: 'Conferir capítulo', manual: 'Editar capítulo à mão',
+    quem: 'Quem usa este aparelho', relato: 'Relatar problema'
+  };
+  // rótulo técnico para o log: só ids, nunca texto digitado
+  function rotuloTela() {
+    if (typeof ui === 'undefined' || !ui) return '';
+    if (janelaCaritas) return 'caritas-janela';
+    if (ui.tela === 'etapa' && Dados.conteudo) { var e = etapaAtual(); return 'etapa/' + (e ? e.id : '?'); }
+    return ui.tela;
+  }
+  function legivelTela() {
+    if (ui.tela === 'etapa') { var l = etapas(), e = etapaAtual(); return 'Etapa ' + (l.indexOf(e) + 1) + ' de ' + l.length + ' — ' + e.titulo; }
+    return NOMES_TELA[ui.tela] || ui.tela;
+  }
+  function standalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone), (display-mode: minimal-ui)').matches) || navigator.standalone === true;
+  }
+
   /* =================================================================
      Encontro em andamento (rascunho local; recuperação na abertura)
      ================================================================= */
@@ -282,6 +368,7 @@
       ese: { visto: false, lidos: [] }
     };
     Dados.gravarEstado();
+    Log.add('INFO', 'encontro', 'iniciado');
     return est.encontroEmAndamento;
   }
   function marcarEtapaVista(e) {
@@ -358,6 +445,10 @@
     notasValidas(enc).forEach(function (n) { notas.push({ t: n.t, autor: n.autor, encontro: enc.data, etapa: n.etapa, texto: n.texto }); });
     if (!Local.gravar('registros', regs)) return false;
     Local.gravar('anotacoes', notas);
+    Log.add('INFO', 'encontro', 'registrado', {
+      data: enc.data, leLida: enc.le.lida, eseItens: enc.ese.lidos.length,
+      presentes: enc.presentes.length, notas: notasValidas(enc).length, etapasVistas: enc.etapas.length
+    });
     aplicarAoEstado(enc);
     Dados.estado.encontroEmAndamento = null;
     Dados.gravarEstado();
@@ -398,7 +489,9 @@
   function abrirWhatsApp(texto) {
     var enc = encodeURIComponent(texto);
     // Windows: app de desktop (C-4, a testar no note). Demais: wa.me abre o app no celular/tablet.
-    if (/Windows/i.test(navigator.userAgent)) location.href = 'whatsapp://send?text=' + enc;
+    var desktop = /Windows/i.test(navigator.userAgent);
+    Log.add('INFO', 'whatsapp', 'aberto', { modo: desktop ? 'whatsapp://' : 'wa.me', caracteres: texto.length });
+    if (desktop) location.href = 'whatsapp://send?text=' + enc;
     else window.open('https://wa.me/?text=' + enc, '_blank', 'noopener');
   }
   function copiar(texto, ok) {
@@ -427,9 +520,11 @@
   function topo() {
     if (janelaCaritas) return '';
     var q = quem();
+    var relatar = Local.ler('relatarNoTopo', true) && ui.tela !== 'relato' && ui.tela !== 'quem';
     return '<header class="topo">' +
       '<button type="button" class="topo-nome" data-acao="inicio">Evangelho no Lar</button>' +
       '<span class="topo-espaco"></span>' +
+      (relatar ? '<button type="button" class="btn-relatar" data-acao="relatar" aria-label="Relatar problema">' + ICONE.bandeira + '<span class="txt">Relatar</span></button>' : '') +
       (q ? '<button type="button" class="chip" data-acao="trocarQuem" aria-label="Quem usa este aparelho: ' + esc(q) + '. Trocar">' + esc(q) + '</button>' : '') +
       '</header>';
   }
@@ -697,6 +792,98 @@
     };
   };
 
+  /* ---------- relatar problema / registro de eventos (D-15) ---------- */
+  TELAS.relato = function () {
+    var o = ui.origemRelato || { legivel: 'Início' };
+    var ev = Log.eventos();
+    var erros = ev.filter(function (x) { return x.n === 'ERRO'; }).length;
+    var h = '<button type="button" class="link link-azul" data-acao="voltarDoRelato">‹ Voltar para onde estava</button>' +
+      '<h1>Relatar problema</h1>' +
+      '<p class="suave pequeno">Tela onde você estava: <b>' + esc(o.legivel) + '</b></p>' +
+      '<label class="campo">O que aconteceu? O que você esperava que acontecesse?' +
+      '<textarea class="entrada" rows="5" id="relato-texto" data-campo="relato">' + esc(ui.relatoTexto || '') + '</textarea></label>' +
+      '<p class="suave pequeno">Não escreva nomes de participantes, anotações nem pedidos de oração.</p>' +
+      '<button type="button" class="btn btn-cheio" data-acao="relatoCompartilhar">' + ICONE.enviar + 'Compartilhar relatório (.txt)</button>' +
+      '<div class="grade2"><button type="button" class="btn" data-acao="relatoBaixar">Baixar .txt</button>' +
+      '<button type="button" class="btn" data-acao="relatoCopiar">Copiar</button></div>' +
+      '<div class="cartao"><div class="rotulo">Registro deste aparelho</div>' +
+      '<div class="suave pequeno">' + ev.length + ' eventos' + (ev.length ? ' desde ' + esc(dataHora(ev[0].t)) : '') +
+      ' · ' + erros + ' erros · guarda os últimos ' + LOG_MAX + ' · aparelho ' + esc(Log.aparelho()) + ' · versão ' + VERSAO_APP + '</div>';
+    if (ev.length) {
+      h += '<div class="suave pequeno">Últimos eventos (o mais recente em cima):</div><ol class="log-lista">';
+      ev.slice(-15).reverse().forEach(function (x) {
+        h += '<li' + (x.n === 'ERRO' ? ' class="erro"' : '') + '>' + esc(x.t.slice(11, 19) + ' ' + x.n + ' ' + x.c + ' · ' + x.m) + '</li>';
+      });
+      h += '</ol>';
+    }
+    h += '<button type="button" class="link" data-acao="logLimpar">Apagar o registro deste aparelho</button></div>';
+    return { corpo: h };
+  };
+
+  function kb(n) { return n == null ? '?' : n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB'; }
+  function linhaEvento(x) {
+    function col(s, n) { s = String(s || '-'); while (s.length < n) s += ' '; return s; }
+    return x.t + '  ' + col(x.n, 6) + ' ' + col(x.c, 13) + ' ' + col(x.tela, 18) + ' ' + x.m +
+      (x.d ? '  ' + JSON.stringify(x.d) : '') + (x.v !== VERSAO_APP ? '  (v' + x.v + ')' : '');
+  }
+  function nomeRelatorio() {
+    var d = new Date();
+    return 'relato-' + Log.aparelho() + '-' + hojeISO(d).replace(/-/g, '') + '-' + horaHM(d).replace(':', '') + '.txt';
+  }
+  function montarRelatorio() {
+    var est = navigator.storage && navigator.storage.estimate ? navigator.storage.estimate().catch(function () { return null; }) : Promise.resolve(null);
+    var cs = window.caches ? caches.keys().then(function (k) { return k.filter(function (n) { return n.indexOf('enl-') === 0; }); }).catch(function () { return []; }) : Promise.resolve([]);
+    return Promise.all([est, cs]).then(function (r) {
+      var e = r[0], nomesCache = r[1], o = ui.origemRelato || {};
+      var idx = Textos.indice(), enc = Dados.encontro(), L = [];
+      L.push('Relatório de teste — Evangelho no Lar (Roteiro)');
+      L.push('Gerado em: ' + instante());
+      L.push('Aparelho: ' + Log.aparelho() + ' · quem usa: ' + (quem() || '—'));
+      L.push('Versão do app: ' + VERSAO_APP + ' · parser ' + FT.VERSAO + ' · cache: ' + (nomesCache.join(', ') || 'nenhum') +
+        ' · service worker: ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'ativo' : 'inativo'));
+      L.push('Navegador: ' + navigator.userAgent);
+      L.push('Tela: ' + window.innerWidth + '×' + window.innerHeight + ' @' + (window.devicePixelRatio || 1) +
+        ' · instalado como app: ' + (standalone() ? 'sim' : 'não') + ' · online: ' + (navigator.onLine ? 'sim' : 'não'));
+      if (e) L.push('Armazenamento do site: ' + kb(e.usage) + ' usados de ' + kb(e.quota));
+      L.push('Dados no aparelho: textos ' + idx.length + (idx.length ? ' (' + idx.map(function (x) { return x.chave; }).join(', ') + ')' : '') +
+        ' · encontros registrados ' + Local.ler('registros', []).length +
+        ' · encontro em andamento: ' + (enc ? 'sim, de ' + dataBR(enc.data) : 'não') +
+        ' · link da sala cadastrado: ' + (Dados.conteudo.meet ? 'sim' : 'não'));
+      L.push('Leituras: LE próxima ' + Dados.estado.le.proxima + ' · ESE cap. ' + Dados.estado.ese.capitulo + ', próximo item ' + Dados.estado.ese.proximoItem);
+      L.push('Tela onde estava: ' + (o.legivel || '—') + ' [' + (o.rotulo || '-') + ']');
+      L.push('');
+      L.push('O que aconteceu:');
+      L.push((ui.relatoTexto || '').trim() || '(sem descrição)');
+      L.push('');
+      var ev = Log.eventos();
+      L.push('Eventos: ' + ev.length + ', do mais antigo ao mais recente. Colunas: hora, nível, categoria, tela, mensagem, dados.');
+      ev.forEach(function (x) { L.push(linhaEvento(x)); });
+      return L.join('\n') + '\n';
+    });
+  }
+  function registrarRelato(modo) {
+    var txt = (ui.relatoTexto || '').trim();
+    Log.add('RELATO', 'relato', txt || '(sem descrição)', { modo: modo, origem: (ui.origemRelato || {}).rotulo || '' });
+  }
+  function compartilharArquivo(nome, texto) {
+    var arquivo = null;
+    try { arquivo = new File([texto], nome, { type: 'text/plain' }); } catch (e) { /* navegador antigo */ }
+    if (arquivo && navigator.canShare && navigator.share && navigator.canShare({ files: [arquivo] })) {
+      return navigator.share({ files: [arquivo], title: nome }).then(function () {
+        avisar('Relatório compartilhado.');
+      }, function (err) {
+        if (err && err.name === 'AbortError') return;
+        Log.add('AVISO', 'relato', 'compartilhar falhou', { erro: err && err.name });
+        baixar(nome, texto);
+        avisar('Não deu para compartilhar. O .txt foi baixado: envie pela pasta Downloads.');
+      });
+    }
+    Log.add('AVISO', 'relato', 'compartilhar indisponível', { canShare: !!navigator.canShare });
+    baixar(nome, texto);
+    avisar('Este navegador não compartilha arquivo. O .txt foi baixado: envie pela pasta Downloads.');
+    return Promise.resolve();
+  }
+
   /* ---------- modo edição ---------- */
   var ROTULO_ESPECIAL = { antes: 'botões de envio', le: 'tela de leitura do Livro dos Espíritos', ese: 'tela de leitura do Evangelho', caritas: 'Prece de Cáritas', finalizar: 'finalizar o encontro' };
 
@@ -750,6 +937,11 @@
 
     h += '<div class="secao-ed"><h2>Este aparelho</h2>' +
       '<label class="campo">Quem usa este aparelho<input class="entrada" type="text" data-campo="ed.quem" value="' + esc(r.quem) + '"></label></div>';
+
+    h += '<div class="secao-ed"><h2>Testes</h2>' +
+      '<label style="min-height:52px;display:flex;align-items:center;gap:14px;font-size:20px;cursor:pointer">' +
+      '<input type="checkbox" data-campo="ed.relatarNoTopo"' + (r.relatarNoTopo ? ' checked' : '') + ' style="width:26px;height:26px;margin:0">Mostrar o botão Relatar no topo</label>' +
+      '<button type="button" class="btn btn-medio" style="align-self:flex-start" data-acao="relatar">Abrir registro e relatório</button></div>';
 
     var rodape = '<footer class="rodape-nav"><div class="grade2">' +
       '<button type="button" class="btn btn-cheio" data-acao="edSalvar">Salvar</button>' +
@@ -949,6 +1141,7 @@
   /* =================================================================
      Redesenho
      ================================================================= */
+  var ultimaTelaLog = null;
   function render() {
     document.documentElement.style.setProperty('--tam', tamanho() + 'px');
     if (janelaCaritas) {
@@ -960,6 +1153,8 @@
     var corpoAnt = document.getElementById('corpo');
     var rolagem = corpoAnt && !ui.rolarTopo ? corpoAnt.scrollTop : 0;
     var p = (TELAS[ui.tela] || TELAS.inicio)();
+    var rot = rotuloTela();
+    if (rot !== ultimaTelaLog) { Log.add('INFO', 'tela', rot); ultimaTelaLog = rot; }
     $app.innerHTML = topo() + '<main class="corpo" id="corpo">' + (p.faixa || '') + '<div class="folha">' + p.corpo + '</div></main>' + (p.rodape || '') + htmlDialogo();
     document.getElementById('corpo').scrollTop = rolagem;
     ui.rolarTopo = false;
@@ -995,6 +1190,7 @@
     if (!n) { n = { etapa: np.etapa, autor: autor, t: instante(), texto: '' }; enc.notas.push(n); }
     n.texto = np.texto; n.t = instante();
     Dados.gravarEstado();
+    Log.add('INFO', 'nota', 'salva', { etapa: np.etapa, caracteres: np.texto.length });
     var st = document.getElementById('nota-status');
     if (st) st.textContent = 'Salvo às ' + horaHM() + ' · ' + autor;
   }
@@ -1019,6 +1215,7 @@
       else if (ui.topico > 0) { ui.topico--; ui.nome = ehCasa(t[ui.topico]) ? Math.max(0, nomes.length - 1) : 0; }
       else return;
     }
+    Log.add('ACAO', 'prece', dir > 0 ? 'avancar' : 'voltar', { topico: ui.topico + 1, de: n, nome: casa || ehCasa(t[ui.topico]) ? ui.nome + 1 : undefined });
     render();
   }
 
@@ -1043,16 +1240,26 @@
     if (rolar && alvo) alvo.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
+  // só contagens e tipos: as mensagens do parser podem citar trechos do texto
+  function resumoAnalise(cap, nomeArquivo, origem, bytes) {
+    var cl = classificar(cap), tipos = {};
+    cap.avisos.forEach(function (a) { tipos[a.tipo] = (tipos[a.tipo] || 0) + 1; });
+    var r = { chave: cap.chave, arquivo: nomeArquivo, origem: origem, itens: cap.itens.length, erros: cl.erros.length, avisos: cl.avisos.length, conferir: cl.conferir.length, tipos: tipos, parser: FT.VERSAO };
+    if (bytes != null) r.tamanho = bytes;
+    return r;
+  }
+
   function lerArquivo(arquivo) {
     if (!arquivo) return;
-    if (arquivo.size > 2 * 1024 * 1024) { avisar('Arquivo grande demais para um capítulo (mais de 2 MB).'); return; }
+    if (arquivo.size > 2 * 1024 * 1024) { Log.add('AVISO', 'texto', 'arquivo grande demais', { bytes: arquivo.size }); avisar('Arquivo grande demais para um capítulo (mais de 2 MB).'); return; }
     var leitor = new FileReader();
     leitor.onload = function () {
       var txt = String(leitor.result || '');
       ui.analise = { txt: txt, nomeArquivo: arquivo.name, origem: 'arquivo', cap: FT.analisar(txt, { nomeArquivo: arquivo.name }), voltar: 'textos' };
+      Log.add('INFO', 'texto', 'analisado', resumoAnalise(ui.analise.cap, arquivo.name, 'arquivo', arquivo.size));
       ir('analise');
     };
-    leitor.onerror = function () { avisar('Não deu para ler o arquivo.'); };
+    leitor.onerror = function () { Log.add('ERRO', 'texto', 'leitura do arquivo falhou', { erro: leitor.error && leitor.error.name }); avisar('Não deu para ler o arquivo.'); };
     leitor.readAsText(arquivo, 'utf-8');
   }
 
@@ -1075,8 +1282,9 @@
 
     entrarNaSala: function () {
       var meet = Dados.conteudo.meet;
-      if (!meet) { avisar('Cadastre o link da sala em Modo edição › Sala e mensagem.'); return; }
+      if (!meet) { Log.add('AVISO', 'meet', 'sem link cadastrado'); avisar('Cadastre o link da sala em Modo edição › Sala e mensagem.'); return; }
       garantirEncontro();
+      Log.add('INFO', 'meet', 'aberto');
       window.open(meet, '_blank', 'noopener');
       irEtapa(Math.max(0, idxDe('le')));
     },
@@ -1101,6 +1309,7 @@
     recuperarRegistrar: function () {
       var enc = Dados.encontro();
       var fim = notasValidas(enc).length ? notasValidas(enc).slice(-1)[0].t.slice(11, 16) : enc.inicio;
+      Log.add('INFO', 'encontro', 'recuperado', { data: enc.data });
       if (registrarEncontro(enc, fim)) avisar('Encontro de ' + dataBR(enc.data) + ' registrado com o que ficou salvo.');
       render();
     },
@@ -1108,6 +1317,7 @@
       var enc = Dados.encontro();
       Local.gravar('encontro.descartado', enc);
       Dados.estado.encontroEmAndamento = null; Dados.gravarEstado();
+      Log.add('INFO', 'encontro', 'descartado', { data: enc.data });
       avisar('Rascunho de ' + dataBR(enc.data) + ' descartado.');
       render();
     },
@@ -1125,6 +1335,7 @@
       if (lista.indexOf(v) < 0) { lista.push(v); Dados.gravarConteudo(); }
       var enc = garantirEncontro();
       if (enc.presentes.indexOf(v) < 0) { enc.presentes.push(v); Dados.gravarEstado(); }
+      Log.add('INFO', 'presentes', 'nome acrescentado', { marcados: enc.presentes.length, conhecidos: lista.length });
       ui.focar = 'novo-presente'; render();
     },
 
@@ -1169,12 +1380,43 @@
       setTimeout(function () { try { window.close(); } catch (e) { /* aba comum: o navegador ignora */ } }, 1500);
     },
 
+    /* relatar problema (D-15) */
+    relatar: function () {
+      salvarNotaJa();
+      ui.origemRelato = { tela: ui.tela, idx: ui.idx, rotulo: rotuloTela(), legivel: legivelTela() };
+      ui.focar = 'relato-texto';
+      ir('relato');
+    },
+    voltarDoRelato: function () {
+      var o = ui.origemRelato;
+      ui.relatoTexto = '';
+      if (o && o.tela && o.tela !== 'relato') ir(o.tela, { idx: o.idx }); else ir('inicio');
+    },
+    relatoCompartilhar: function () {
+      registrarRelato('compartilhar');
+      montarRelatorio().then(function (txt) { return compartilharArquivo(nomeRelatorio(), txt); });
+    },
+    relatoBaixar: function () {
+      registrarRelato('baixar');
+      montarRelatorio().then(function (txt) { baixar(nomeRelatorio(), txt); avisar('Relatório baixado (pasta Downloads).'); });
+    },
+    relatoCopiar: function () {
+      registrarRelato('copiar');
+      montarRelatorio().then(function (txt) { copiar(txt, 'Relatório copiado.'); });
+    },
+    logLimpar: function () {
+      if (!confirm('Apagar os eventos guardados neste aparelho? Se precisar deles, compartilhe o relatório antes.')) return;
+      Log.limpar();
+      Log.add('INFO', 'log', 'registro apagado');
+      render();
+    },
+
     abrirNota: function () { var e = etapaAtual(); ui.notaAberta[e.id] = true; ui.focar = 'nota-' + e.id; render(); },
 
     /* modo edição */
     abrirEdicao: function () {
       salvarNotaJa();
-      ui.rascunho = { conteudo: copia(Dados.conteudo), estado: copia({ le: Dados.estado.le, ese: Dados.estado.ese }), quem: quem() };
+      ui.rascunho = { conteudo: copia(Dados.conteudo), estado: copia({ le: Dados.estado.le, ese: Dados.estado.ese }), quem: quem(), relatarNoTopo: Local.ler('relatarNoTopo', true) };
       ir('edicao');
     },
     voltarEdicao: function () {
@@ -1200,6 +1442,8 @@
       Dados.gravarEstado();
       Local.apagar('mensagem');
       if (r.quem.trim()) Local.gravar('quem', r.quem.trim());
+      Local.gravar('relatarNoTopo', !!r.relatarNoTopo);
+      Log.add('INFO', 'edicao', 'salvo', { etapas: r.conteudo.etapas.length, linkSala: !!r.conteudo.meet, relatarNoTopo: !!r.relatarNoTopo });
       ui.rascunho = null;
       avisar('Salvo. A versão anterior ficou guardada neste aparelho.');
       ir('inicio');
@@ -1228,7 +1472,9 @@
     analiseVoltar: function () { ir(ui.analise && ui.analise.voltar === 'manual' ? 'manual' : 'textos'); },
     analiseGravar: function () {
       var a = ui.analise;
-      if (Textos.gravar(a.txt, a.nomeArquivo, a.origem)) {
+      var ok = Textos.gravar(a.txt, a.nomeArquivo, a.origem);
+      Log.add(ok ? 'INFO' : 'ERRO', 'texto', ok ? 'gravado' : 'gravação falhou', { chave: a.cap.chave, origem: a.origem, caracteres: a.txt.length });
+      if (ok) {
         avisar('Gravado: ' + a.nomeArquivo + '.');
         Local.apagar('mensagem');
         ui.analise = null; ui.manual = null;
@@ -1258,6 +1504,7 @@
       var cab = { livro: m.livro, parte: m.parte, capitulo: m.capitulo };
       var nome = FT.nomeArquivoEsperado(cab) || 'capitulo.txt';
       ui.analise = { txt: txt, nomeArquivo: nome, origem: 'manual', cap: FT.analisar(txt, { nomeArquivo: nome }), voltar: 'manual' };
+      Log.add('INFO', 'texto', 'analisado', resumoAnalise(ui.analise.cap, nome, 'manual', txt.length));
       ir('analise');
     }
   };
@@ -1287,8 +1534,10 @@
       else if (p[1] === 'caritas') r.conteudo.caritas = valor.split(/\n\s*\n/).map(function (s) { return s.replace(/\s*\n\s*/g, ' ').trim(); }).filter(Boolean);
       else if (p[1] === 'presentes') r.conteudo.presentesConhecidos = valor.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
       else if (p[1] === 'quem') r.quem = valor;
+      else if (p[1] === 'relatarNoTopo') r.relatarNoTopo = !!(el && el.checked);
       return;
     }
+    if (p[0] === 'relato') { ui.relatoTexto = valor; return; }
     if (p[0] === 'man') {
       var mm = ui.manual;
       if (p[1] === 'item') mm.itens[+p[2]][p[3]] = valor;
@@ -1308,7 +1557,10 @@
     if (a) {
       if (a.disabled) return;
       var f = ACOES[a.dataset.acao];
-      if (f) f(a, ev);
+      if (f) {
+        Log.add('ACAO', 'acao', a.dataset.acao, a.dataset.chave ? { chave: a.dataset.chave } : null);
+        f(a, ev);
+      }
       return;
     }
     var bl = ev.target.closest('[data-bloco]');
@@ -1336,10 +1588,11 @@
       var enc = garantirEncontro(), nome = t.dataset.presente, i = enc.presentes.indexOf(nome);
       if (t.checked && i < 0) enc.presentes.push(nome);
       if (!t.checked && i >= 0) enc.presentes.splice(i, 1);
-      Dados.gravarEstado(); ui.nome = 0; render();
+      Dados.gravarEstado();
+      Log.add('ACAO', 'presentes', t.checked ? 'marcado' : 'desmarcado', { marcados: enc.presentes.length }); ui.nome = 0; render();
       return;
     }
-    if (t.tagName === 'SELECT' && t.dataset && t.dataset.campo) campoInput(t.dataset.campo, t.value, t);
+    if ((t.tagName === 'SELECT' || t.type === 'checkbox') && t.dataset && t.dataset.campo) campoInput(t.dataset.campo, t.value, t);
   });
 
   document.addEventListener('keydown', function (ev) {
@@ -1384,9 +1637,23 @@
      ================================================================= */
   if (!FT) { $app.innerHTML = '<p style="padding:24px">Erro: o leitor de textos (parser.js) não carregou.</p>'; return; }
   Dados.carregar();
+  Log.add('INFO', 'app', 'aberto', {
+    exibicao: standalone() ? 'app instalado' : 'navegador', largura: window.innerWidth, altura: window.innerHeight,
+    dpr: window.devicePixelRatio || 1, online: navigator.onLine, ua: navigator.userAgent
+  });
   render();
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
-    navigator.serviceWorker.register('sw.js').catch(function () { /* sem internet offline, segue */ });
+    var tinhaControlador = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
+      Log.add('INFO', 'sw', 'registrado', { controlador: tinhaControlador });
+    }, function (err) {
+      Log.add('ERRO', 'sw', 'registro falhou', { erro: err && err.message });
+    });
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!tinhaControlador) return; // primeira instalação: nada a avisar
+      Log.add('INFO', 'sw', 'versão nova ativada');
+      avisar('Versão nova instalada. Feche e abra o app para usar.');
+    });
   }
 })();

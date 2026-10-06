@@ -31,6 +31,26 @@ encontro em andamento, registros, anotações e textos dos livros.
 Cada aparelho tem os seus. O link da sala é cadastrado em
 **Modo edição › Sala e mensagem**.
 
+## Registro de eventos e relatório de teste (D-15)
+
+Cada aparelho guarda os últimos 500 eventos em `enl.log`: telas abertas,
+ações (nome do botão), capítulos analisados e gravados (só contagens),
+encontros iniciados e registrados (só contagens), erros de código e falhas de
+armazenamento.
+
+**Nunca entra no log (D-05):** texto de anotação, nomes de presentes, texto dos
+livros, link da sala, conteúdo do registro de encontro.
+
+Botão **Relatar** no topo (desligável em Modo edição › Testes): a pessoa
+descreve o problema e o app gera `relato-<aparelho>-<data>-<hora>.txt` com
+versão, aparelho, navegador, tela de origem, descrição e todos os eventos.
+Compartilhar (Android: menu de compartilhar → WhatsApp), Baixar ou Copiar.
+
+Cada evento é um objeto autossuficiente
+(`{"t","ap","v","n","c","tela","m","d"}`), pronto para virar uma linha de
+`logs/<aparelho>.jsonl` no Drive quando o envio automático entrar (backlog
+da v2).
+
 ## Convivência com o Fitilho
 
 Os dois apps ficam em `jhonnwhell.github.io` e dividem o armazenamento do
