@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Teste C-1 e C-2 — Apps Script</title>
+<style>
+  :root { --tinta: #18203A; --suave: #4A5372; --azul: #2F3D9E; --ok: #1B6B45; --erro: #A12B2B; --borda: #D6DBE8; --fundo: #F3F5FA; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fundo); color: var(--tinta); font: 18px/1.5 system-ui, sans-serif; }
+  main { max-width: 46em; margin: 0 auto; padding: 20px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+  h1 { margin: 0; font-size: 26px; }
+  .cartao { background: #fff; border: 1px solid var(--borda); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  label { font-weight: 700; color: var(--suave); display: flex; flex-direction: column; gap: 6px; }
+  input { font: inherit; padding: 10px; border: 2px solid #B8C0D6; border-radius: 8px; width: 100%; }
+  button { font: inherit; font-weight: 700; min-height: 48px; padding: 0 16px; border-radius: 10px; border: 2px solid var(--azul); background: #fff; color: var(--azul); cursor: pointer; }
+  button.cheio { background: var(--azul); color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  .linha { display: flex; gap: 10px; flex-wrap: wrap; }
+  .ok { color: var(--ok); font-weight: 700; }
+  .erro { color: var(--erro); font-weight: 700; }
+  pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; background: #fff; border: 1px solid var(--borda); border-radius: 8px; padding: 10px; max-height: 50vh; overflow-y: auto; }
+  ol { margin: 0; padding-left: 1.2em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Teste C-1 e C-2 — Apps Script</h1>
+  <p>Página de teste, fora do app. Não guarda dado nenhum além do endereço do script, neste aparelho.</p>
+
+  <div class="cartao">
+    <label>Endereço da implantação (termina em <code>/exec</code>)
+      <input id="url" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+    </label>
+  </div>
+
+  <div class="cartao">
+    <h2 style="margin:0;font-size:20px">C-1 — POST sem pré-verificação</h2>
+    <div class="linha">
+      <button class="cheio" id="b-get">1. GET</button>
+      <button class="cheio" id="b-post">2. POST text/plain</button>
+      <button id="b-json">3. POST application/json (controle)</button>
+    </div>
+    <p class="pequeno" style="margin:0;color:var(--suave)">Esperado: 1 e 2 com ✓. O 3 é o controle: deve falhar, porque esse tipo dispara a pré-verificação que o Apps Script não responde.</p>
+    <div id="r-c1"></div>
+  </div>
+
+  <div class="cartao">
+    <h2 style="margin:0;font-size:20px">C-2 — cota com consulta a cada 15 s</h2>
+    <p style="margin:0">Deixe esta aba aberta e o computador sem dormir por 1 hora. São 240 consultas.</p>
+    <div class="linha">
+      <button class="cheio" id="b-c2">Começar (1 h)</button>
+      <button id="b-parar" disabled>Parar</button>
+    </div>
+    <div id="r-c2"></div>
+  </div>
+
+  <div class="cartao">
+    <h2 style="margin:0;font-size:20px">Resultado para colar no chat</h2>
+    <button id="b-copiar">Copiar resultado</button>
+    <pre id="saida"></pre>
+  </div>
+</main>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var linhas = [];
+  function registrar(s) { linhas.push(new Date().toTimeString().slice(0, 8) + '  ' + s); $('saida').textContent = cabecalho() + linhas.join('\n'); }
+  function cabecalho() { return 'Teste C-1/C-2 · ' + new Date().toISOString().slice(0, 10) + ' · ' + location.origin + ' · ' + navigator.userAgent + '\n\n'; }
+  try { $('url').value = localStorage.getItem('enl.teste.urlScript') || ''; } catch (e) {}
+  $('url').addEventListener('change', function () { try { localStorage.setItem('enl.teste.urlScript', $('url').value.trim()); } catch (e) {} });
+  function url() {
+    var u = $('url').value.trim();
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(u)) { alert('Cole o endereço da implantação, que termina em /exec.'); return null; }
+    return u;
+  }
+  function chamar(rotulo, opcoes, u) {
+    var t0 = performance.now();
+    return fetch(u, opcoes).then(function (r) {
+      return r.text().then(function (txt) {
+        var ms = Math.round(performance.now() - t0), j = null;
+        try { j = JSON.parse(txt); } catch (e) {}
+        if (!r.ok || !j || !j.ok) throw new Error('HTTP ' + r.status + ' · resposta: ' + txt.slice(0, 120));
+        return { ms: ms, j: j };
+      });
+    }).then(function (x) {
+      registrar('OK    ' + rotulo + ' · ' + x.ms + ' ms · ' + JSON.stringify(x.j));
+      return x;
+    }, function (err) {
+      var ms = Math.round(performance.now() - t0);
+      registrar('FALHA ' + rotulo + ' · ' + ms + ' ms · ' + (err && err.message));
+      throw err;
+    });
+  }
+  function mostrar(alvo, ok, texto) {
+    var p = document.createElement('div'); p.className = ok ? 'ok' : 'erro'; p.textContent = (ok ? '✓ ' : '✗ ') + texto; $(alvo).appendChild(p);
+  }
+
+  $('b-get').onclick = function () {
+    var u = url(); if (!u) return;
+    chamar('GET', { method: 'GET' }, u + '?teste=c1').then(function (x) { mostrar('r-c1', true, 'GET respondeu em ' + x.ms + ' ms'); }, function () { mostrar('r-c1', false, 'GET falhou (ver resultado)'); });
+  };
+  $('b-post').onclick = function () {
+    var u = url(); if (!u) return;
+    chamar('POST text/plain', { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ n: 1, acao: 'teste' }) }, u)
+      .then(function (x) { mostrar('r-c1', x.j.jsonValido === true, 'POST text/plain respondeu em ' + x.ms + ' ms · JSON lido no servidor: ' + (x.j.jsonValido ? 'sim' : 'não')); },
+            function () { mostrar('r-c1', false, 'POST text/plain falhou — C-1 não se confirma (ver resultado)'); });
+  };
+  $('b-json').onclick = function () {
+    var u = url(); if (!u) return;
+    chamar('POST application/json (controle)', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ n: 1 }) }, u)
+      .then(function () { mostrar('r-c1', true, 'Controle passou (inesperado, mas não atrapalha)'); },
+            function () { mostrar('r-c1', true, 'Controle falhou, como esperado'); });
+  };
+
+  var timer = null, n = 0, oks = 0, falhas = 0, tempos = [], fim = 0;
+  function resumoC2() {
+    var media = tempos.length ? Math.round(tempos.reduce(function (a, b) { return a + b; }, 0) / tempos.length) : 0;
+    var max = tempos.length ? Math.max.apply(null, tempos) : 0;
+    return n + ' consultas · ' + oks + ' ok · ' + falhas + ' falhas · média ' + media + ' ms · máximo ' + max + ' ms';
+  }
+  function passo() {
+    var u = url(); if (!u) { parar(); return; }
+    n++;
+    var corpo = JSON.stringify({ n: n, acao: 'consulta' });
+    chamar('C-2 #' + n, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: corpo }, u)
+      .then(function (x) { oks++; tempos.push(x.ms); }, function () { falhas++; })
+      .then(function () {
+        $('r-c2').textContent = resumoC2();
+        if (Date.now() >= fim || n >= 240) { parar(); registrar('C-2 TERMINOU · ' + resumoC2()); }
+      });
+  }
+  function parar() { clearInterval(timer); timer = null; $('b-c2').disabled = false; $('b-parar').disabled = true; }
+  $('b-c2').onclick = function () {
+    if (!url()) return;
+    n = 0; oks = 0; falhas = 0; tempos = []; fim = Date.now() + 60 * 60 * 1000;
+    $('b-c2').disabled = true; $('b-parar').disabled = false;
+    registrar('C-2 COMEÇOU');
+    passo(); timer = setInterval(passo, 15000);
+  };
+  $('b-parar').onclick = function () { parar(); registrar('C-2 PARADO À MÃO · ' + resumoC2()); };
+  $('b-copiar').onclick = function () {
+    var t = $('saida').textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { alert('Copiado.'); }, function () { alert('Selecione o texto e copie à mão.'); });
+  };
+  $('saida').textContent = cabecalho() + '(nenhum teste ainda)';
+})();
+</script>
+</body>
+</html>

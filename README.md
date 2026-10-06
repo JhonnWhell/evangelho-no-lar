@@ -22,6 +22,8 @@ Textos e dados ficam no Google Drive privado (D-03, D-05, D-14).
 | `sw.js` | funcionamento sem internet |
 | `fonts/` | Atkinson Hyperlegible (SIL OFL 1.1, ver `fonts/OFL.txt`) |
 | `icons/` | ícones (provisórios até a escolha do nome curto, P-14) |
+| `apps-script/teste-c1-c2.gs` | script só de teste do Apps Script (C-1, C-2). Não guarda dado. |
+| `testes/c1-c2.html` | página de teste de C-1 e C-2, fora do app (o service worker não a intercepta) |
 
 ## Onde ficam os dados (por enquanto)
 

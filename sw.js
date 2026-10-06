@@ -11,7 +11,7 @@
    Ao publicar qualquer mudança, aumente VERSAO.
    ===================================================================== */
 var PREFIXO = 'enl-';
-var VERSAO = PREFIXO + 'v0.3.0';
+var VERSAO = PREFIXO + 'v0.3.1';
 
 var ARQUIVOS = [
   './',
@@ -60,7 +60,11 @@ self.addEventListener('fetch', function (e) {
   var url = new URL(req.url);
   // Só arquivos deste app; Apps Script e qualquer outra origem vão direto à rede
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.indexOf(new URL(self.registration.scope).pathname) !== 0) return;
+  var base = new URL(self.registration.scope).pathname;
+  if (url.pathname.indexOf(base) !== 0) return;
+  // Navegação: só a página do app vem do cache; outras páginas (ex.: testes/) vão à rede
+  var rel = url.pathname.slice(base.length);
+  if (req.mode === 'navigate' && rel !== '' && rel !== 'index.html') return;
 
   e.respondWith(
     caches.open(VERSAO).then(function (c) {

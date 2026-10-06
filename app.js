@@ -11,7 +11,7 @@
 (function () {
   'use strict';
 
-  var VERSAO_APP = '0.3.0';
+  var VERSAO_APP = '0.3.1';
   var FT = window.FormatoTexto1;
   var SEMENTE = window.ENL_SEMENTE;
   var $app = document.getElementById('app');
